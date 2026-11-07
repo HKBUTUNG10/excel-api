@@ -181,6 +181,19 @@ function App() {
 function TeacherView({ roster, checkedInCount, session, sessionActive, remainingMinutes, sessionCode, qrUrl, loading, syncing, onStart, onReset, onStudentView }) {
   return (
     <>
+      <section className="qr-hero panel">
+        <div className="qr-hero-copy">
+          <p className="eyebrow accent">Fast lane check-in</p>
+          <h3>Put the QR code<br /><span>at the door.</span></h3>
+          <p>Students scan, enter their ID, and you&apos;ll see them appear on the live roster. No app download required.</p>
+          <div className="qr-session-meta"><span className="status-dot" /> Session <strong>{sessionCode}</strong> · {sessionActive ? 'open for check-in' : 'start a session to open'}</div>
+          <button className="secondary-button qr-hero-button" type="button" onClick={onStudentView}>Preview student check-in <span aria-hidden="true">→</span></button>
+        </div>
+        <div className="qr-hero-code">
+          <img className="qr-code-large" src={qrUrl} alt={`QR code for session ${sessionCode}`} />
+          <span>Scan to check in</span>
+        </div>
+      </section>
       <section className="stats-grid" aria-label="Session overview">
         <div className={`stat-card primary-stat ${sessionActive && remainingMinutes <= 5 ? 'urgent-stat' : ''}`}>
           <div className="stat-label">Today&apos;s session</div>
