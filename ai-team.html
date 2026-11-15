@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="zh-HK">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="AI Team Room — local LM Studio multi-agent discussion room">
+  <title>AI Team Room</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0c1018;
+      --panel: #151b26;
+      --panel-2: #1b2432;
+      --panel-3: #222d3e;
+      --line: #2b3a4f;
+      --text: #edf3fb;
+      --muted: #91a1b7;
+      --accent: #73a7ff;
+      --accent-2: #61dfbd;
+      --danger: #ff7d8c;
+      --warning: #f4c76d;
+      --shadow: 0 18px 50px rgba(0,0,0,.24);
+      --radius: 16px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 20% 0%, #172338 0, var(--bg) 42%); color: var(--text); }
+    button, input, textarea, select { font: inherit; }
+    button { cursor: pointer; }
+    .app { display: grid; grid-template-columns: 280px minmax(0, 1fr) 320px; min-height: 100vh; }
+    .sidebar, .inspector { background: rgba(15, 21, 31, .82); border-color: var(--line); }
+    .sidebar { border-right: 1px solid var(--line); padding: 22px 16px; }
+    .inspector { border-left: 1px solid var(--line); padding: 22px 16px; overflow: auto; }
+    .brand { display:flex; align-items:center; gap: 12px; margin: 0 8px 26px; }
+    .brand-mark { width: 40px; height:40px; display:grid; place-items:center; border-radius: 12px; background: linear-gradient(135deg, var(--accent), #9d7cff); color:#09101c; font-weight: 900; box-shadow: 0 10px 24px rgba(115,167,255,.28); }
+    .brand strong { display:block; font-size: 15px; letter-spacing:.02em; }
+    .brand span { color:var(--muted); font-size:12px; }
+    .nav-label, .section-label { color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; margin: 22px 8px 9px; }
+    .nav-btn, .member { width:100%; border:0; color:var(--text); background:transparent; border-radius: 11px; padding: 10px 11px; display:flex; align-items:center; gap:10px; text-align:left; }
+    .nav-btn:hover, .member:hover, .member.active { background: var(--panel-3); }
+    .nav-btn.active { background: linear-gradient(90deg, rgba(115,167,255,.18), transparent); color: var(--accent); }
+    .nav-icon { width: 22px; text-align:center; }
+    .members { display:grid; gap: 4px; }
+    .member-row { display:flex; align-items:stretch; gap:4px; }
+    .member-row > .member { flex:1; min-width:0; }
+    .member-edit { width:32px; border:0; border-radius:9px; color:var(--muted); background:transparent; }
+    .member-edit:hover { color:var(--text); background:var(--panel-3); }
+    .member { position:relative; font-size:13px; }
+    .avatar { width: 30px; height:30px; border-radius: 10px; display:grid; place-items:center; color:#07101c; font-weight:800; flex:0 0 auto; }
+    .member-info { min-width:0; flex:1; }
+    .member-name { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .member-role { display:block; color:var(--muted); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+    .status-dot { width:7px; height:7px; border-radius:50%; background:var(--muted); }
+    .status-dot.online { background: var(--accent-2); box-shadow: 0 0 0 4px rgba(97,223,189,.1); }
+    .sidebar-footer { margin-top:auto; padding-top:24px; }
+    .main { min-width:0; display:flex; flex-direction:column; }
+    header { height:76px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:14px; padding: 0 28px; background:rgba(12,16,24,.65); backdrop-filter: blur(16px); }
+    .header-title h1 { font-size:19px; margin:0; }
+    .header-title p { color:var(--muted); font-size:12px; margin:4px 0 0; }
+    .header-actions { display:flex; align-items:center; gap:8px; }
+    .pill { border:1px solid var(--line); background:var(--panel); border-radius:999px; padding:7px 10px; color:var(--muted); font-size:12px; }
+    .pill.ok { color:var(--accent-2); border-color:rgba(97,223,189,.34); }
+    .content { width:min(100%, 980px); margin:0 auto; padding: 28px; display:flex; flex-direction:column; gap:18px; min-height:0; flex:1; }
+    .welcome { display:flex; justify-content:space-between; align-items:flex-start; gap:18px; }
+    .welcome h2 { margin:0; font-size:24px; letter-spacing:-.02em; }
+    .welcome p { color:var(--muted); margin:7px 0 0; font-size:13px; }
+    .toolbar { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
+    .btn { border:1px solid var(--line); color:var(--text); background:var(--panel); border-radius:10px; padding:9px 12px; font-size:12px; transition: .18s ease; }
+    .btn:hover { border-color:#4b6587; transform:translateY(-1px); }
+    .btn.primary { background:var(--accent); border-color:var(--accent); color:#07101c; font-weight:800; }
+    .btn.ghost { background:transparent; }
+    .btn.danger { color:var(--danger); border-color:rgba(255,125,140,.35); }
+    .btn:disabled { opacity:.45; cursor:not-allowed; transform:none; }
+    .chat { background: rgba(21,27,38,.78); border:1px solid var(--line); border-radius: var(--radius); box-shadow:var(--shadow); overflow:hidden; display:flex; flex-direction:column; min-height:500px; flex:1; }
+    .messages { padding:18px; overflow:auto; display:flex; flex-direction:column; gap:14px; flex:1; min-height:280px; }
+    .empty { margin:auto; max-width:440px; text-align:center; color:var(--muted); padding:30px 12px; }
+    .empty .empty-icon { font-size:36px; margin-bottom:12px; }
+    .message { display:flex; gap:10px; max-width:93%; animation: rise .2s ease-out; }
+    .message.user { margin-left:auto; flex-direction:row-reverse; }
+    .message .bubble { border:1px solid var(--line); border-radius:14px; padding:11px 13px; background:var(--panel-2); min-width:0; }
+    .message.user .bubble { background:rgba(115,167,255,.15); border-color:rgba(115,167,255,.32); }
+    .message-meta { display:flex; align-items:center; gap:7px; color:var(--muted); font-size:11px; margin-bottom:6px; }
+    .message-text { white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.55; font-size:13px; }
+    .message-text code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background:#0b111c; border-radius:5px; padding:1px 4px; }
+    .message-text pre { margin:10px 0 0; overflow:auto; background:#0b111c; padding:10px; border-radius:8px; border:1px solid #253247; }
+    .message-text pre code { padding:0; background:none; }
+    .message-error { color:var(--danger); }
+    .composer { border-top:1px solid var(--line); padding:14px; background:rgba(11,16,24,.56); }
+    .composer-row { display:flex; align-items:flex-end; gap:8px; }
+    textarea { flex:1; resize:none; min-height:48px; max-height:150px; border:1px solid var(--line); border-radius:11px; color:var(--text); background:#101723; padding:12px; outline:none; line-height:1.45; }
+    textarea:focus, input:focus, select:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(115,167,255,.13); }
+    .composer-hint { display:flex; justify-content:space-between; gap:10px; color:var(--muted); font-size:11px; margin-top:7px; }
+    .card { border:1px solid var(--line); background:rgba(21,27,38,.72); border-radius:var(--radius); padding:15px; margin-bottom:12px; }
+    .card h3 { margin:0 0 12px; font-size:13px; }
+    .setting { display:flex; justify-content:space-between; gap:12px; align-items:center; margin:11px 0; }
+    .setting label { color:var(--muted); font-size:12px; }
+    input, select { width:100%; border:1px solid var(--line); border-radius:9px; background:#101723; color:var(--text); padding:9px 10px; outline:none; }
+    .setting > input, .setting > select { max-width:150px; }
+    .stack { display:grid; gap:8px; }
+    .row { display:flex; gap:8px; align-items:center; }
+    .row > * { min-width:0; }
+    .muted { color:var(--muted); font-size:12px; }
+    .metric { display:flex; justify-content:space-between; align-items:baseline; margin:9px 0; }
+    .metric strong { font-size:18px; }
+    .tag { border:1px solid var(--line); border-radius:999px; padding:3px 7px; font-size:10px; color:var(--muted); }
+    .toast { position:fixed; z-index:20; right:22px; bottom:22px; background:#27354a; color:var(--text); border:1px solid #456080; box-shadow:var(--shadow); border-radius:10px; padding:11px 13px; font-size:12px; transform:translateY(15px); opacity:0; pointer-events:none; transition:.2s; }
+    .toast.show { transform:none; opacity:1; }
+    dialog { border:1px solid var(--line); color:var(--text); background:var(--panel); border-radius:16px; width:min(560px, calc(100vw - 28px)); padding:0; box-shadow:var(--shadow); }
+    dialog::backdrop { background:rgba(2,5,10,.72); backdrop-filter:blur(4px); }
+    .dialog-head, .dialog-body, .dialog-foot { padding:16px 18px; }
+    .dialog-head { border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; }
+    .dialog-head h2 { font-size:16px; margin:0; }
+    .dialog-body { display:grid; gap:12px; }
+    .dialog-foot { border-top:1px solid var(--line); display:flex; justify-content:flex-end; gap:8px; }
+    .field label { display:block; color:var(--muted); font-size:12px; margin-bottom:6px; }
+    .field textarea { min-height:90px; width:100%; }
+    .color-input { width:44px !important; height:34px; padding:3px; }
+    .team-list { display:grid; gap:8px; max-height:290px; overflow:auto; }
+    .team-item { display:flex; align-items:center; gap:10px; padding:8px; background:var(--panel-2); border-radius:9px; }
+    .team-item .team-copy { flex:1; min-width:0; }
+    .team-item strong, .team-item span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .team-item span { color:var(--muted); font-size:11px; margin-top:2px; }
+    .hidden { display:none !important; }
+    @keyframes rise { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+    @media (max-width: 1050px) { .app { grid-template-columns: 230px minmax(0,1fr); } .inspector { display:none; } }
+    @media (max-width: 700px) {
+      .app { display:block; }
+      .sidebar { border-right:0; border-bottom:1px solid var(--line); padding:12px; }
+      .brand { margin:0 4px 10px; }
+      .nav-label { display:none; }
+      .nav-btn { display:none; }
+      .members { display:flex; overflow:auto; padding-bottom:2px; }
+      .member-row { min-width:215px; }
+      .member { min-width:175px; background:var(--panel); }
+      .sidebar-footer { display:none; }
+      header { height:auto; padding:15px; align-items:flex-start; }
+      .header-actions { flex-wrap:wrap; justify-content:flex-end; }
+      .content { padding:15px; }
+      .welcome { display:block; }
+      .toolbar { justify-content:flex-start; margin-top:14px; }
+      .chat { min-height:calc(100vh - 275px); }
+      .message { max-width:100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">✦</div><div><strong>AI Team Room</strong><span>Local LM Studio workspace</span></div></div>
+      <div class="nav-label">Workspace</div>
+      <button class="nav-btn active" type="button" data-action="focus-chat"><span class="nav-icon">◈</span>團隊討論</button>
+      <button class="nav-btn" type="button" data-action="summary"><span class="nav-icon">▤</span>討論摘要</button>
+      <button class="nav-btn" type="button" data-action="export"><span class="nav-icon">⇩</span>匯出紀錄</button>
+      <div class="nav-label">Team members <button class="btn ghost" style="float:right;padding:2px 6px" type="button" data-action="add-member">＋</button></div>
+      <div class="members" id="member-list"></div>
+      <div class="sidebar-footer muted">資料只保存在此瀏覽器。API 請求直接連到本機 LM Studio。</div>
+    </aside>
+
+    <main class="main">
+      <header>
+        <div class="header-title"><h1 id="room-title">團隊討論</h1><p id="room-subtitle">選擇全隊，或者用 @名稱 指定一位隊員</p></div>
+        <div class="header-actions"><span class="pill" id="model-pill">未連線</span><span class="pill" id="connection-pill">● 離線</span><button class="btn" type="button" data-action="settings">設定</button></div>
+      </header>
+      <section class="content">
+        <div class="welcome"><div><h2>今日要解決咩問題？</h2><p>你係組長。輸入問題後，AI 隊員會按設定輪流回應。</p></div><div class="toolbar"><button class="btn" type="button" data-action="new-chat">新討論</button><button class="btn primary" type="button" data-action="run-round" id="round-btn">開始一輪</button></div></div>
+        <div class="chat">
+          <div class="messages" id="messages"><div class="empty" id="empty-state"><div class="empty-icon">✦</div><strong>未有討論內容</strong><p>可以直接輸入問題，或按「開始一輪」讓全隊針對目前問題發言。</p></div></div>
+          <div class="composer"><div class="composer-row"><textarea id="prompt-input" rows="1" placeholder="輸入問題…（Enter 發送，Shift+Enter 換行；例如：@研究員 幫我找出風險）"></textarea><button class="btn primary" type="button" data-action="send" id="send-btn">發送</button></div><div class="composer-hint"><span id="target-hint">目前對象：全隊</span><span>支援 @名稱 · <span id="char-count">0</span>/4000</span></div></div>
+        </div>
+      </section>
+    </main>
+
+    <aside class="inspector">
+      <div class="section-label">Room status</div>
+      <div class="card"><div class="metric"><span class="muted">目前模型</span><strong id="inspector-model">—</strong></div><div class="metric"><span class="muted">隊員數量</span><strong id="member-count">0</strong></div><div class="metric"><span class="muted">訊息數量</span><strong id="message-count">0</strong></div></div>
+      <div class="section-label">Current target</div>
+      <div class="card" id="target-card"><div class="row"><div class="avatar" style="background:#73a7ff">全</div><div><strong>全隊討論</strong><div class="muted">輪流邀請所有在線隊員</div></div></div></div>
+      <div class="section-label">Quick settings</div>
+      <div class="card"><div class="setting"><label>回應輪數</label><select id="rounds-input"><option value="1">1 輪</option><option value="2">2 輪</option><option value="3">3 輪</option></select></div><div class="setting"><label>每次最大 tokens</label><input id="tokens-input" type="number" min="64" max="8192" step="64"></div><div class="setting"><label>自動過濾 think</label><input id="think-input" type="checkbox" style="width:auto"></div></div>
+      <div class="card"><h3>安全提示</h3><div class="muted">AI 回應只會以純文字安全渲染；Markdown 連結不會執行 HTML。不要在對話中貼上 API key 或私人資料。</div></div>
+    </aside>
+  </div>
+
+  <dialog id="settings-dialog">
+    <div class="dialog-head"><h2>LM Studio 連線設定</h2><button class="btn ghost" type="button" data-action="close-dialog">✕</button></div>
+    <div class="dialog-body">
+      <div class="field"><label for="base-url">API Base URL</label><input id="base-url" type="url" placeholder="http://localhost:1234/v1"></div>
+      <div class="field"><label for="api-key">API Key（可留空；只會存於本機）</label><input id="api-key" type="password" autocomplete="off" placeholder="lm-studio"></div>
+      <div class="field"><label for="model-select">指定模型</label><select id="model-select"><option value="">自動使用第一個已載入模型</option></select></div>
+      <div class="row"><button class="btn" type="button" data-action="load-models">重新讀取模型</button><span class="muted" id="model-status">未讀取</span></div>
+      <div class="field"><label for="system-prompt">組長系統指令（可選）</label><textarea id="system-prompt" placeholder="例如：保持香港繁體中文，回答要具體、簡潔。"></textarea></div>
+    </div>
+    <div class="dialog-foot"><button class="btn" type="button" data-action="close-dialog">取消</button><button class="btn primary" type="button" data-action="save-settings">儲存並測試</button></div>
+  </dialog>
+
+  <dialog id="member-dialog">
+    <div class="dialog-head"><h2 id="member-dialog-title">新增 AI 隊員</h2><button class="btn ghost" type="button" data-action="close-dialog">✕</button></div>
+    <div class="dialog-body">
+      <input id="member-id" type="hidden">
+      <div class="field"><label for="member-name">名稱（@提及時使用）</label><input id="member-name" maxlength="24" placeholder="例如：研究員"></div>
+      <div class="field"><label for="member-role">角色</label><input id="member-role" maxlength="40" placeholder="例如：資料研究與事實核查"></div>
+      <div class="field"><label for="member-instruction">角色指令</label><textarea id="member-instruction" maxlength="1200" placeholder="描述這位隊員應如何思考、回答和與其他隊員協作。"></textarea></div>
+      <div class="row"><div class="field" style="flex:1"><label for="member-model">專用模型（可選）</label><input id="member-model" placeholder="留空使用房間模型"></div><div class="field"><label for="member-color">顏色</label><input id="member-color" class="color-input" type="color" value="#73a7ff"></div></div>
+    </div>
+    <div class="dialog-foot"><button class="btn danger hidden" type="button" data-action="delete-member" id="delete-member-btn">刪除隊員</button><span style="flex:1"></span><button class="btn" type="button" data-action="close-dialog">取消</button><button class="btn primary" type="button" data-action="save-member">儲存</button></div>
+  </dialog>
+
+  <div class="toast" id="toast"></div>
+  <script>
+    (() => {
+      'use strict';
+      const STORAGE_KEY = 'ai-team-room-v1';
+      const DEFAULT = {
+        settings: { baseUrl: 'http://localhost:1234/v1', apiKey: '', model: '', systemPrompt: '你係 AI 團隊其中一員。請用香港繁體中文回答，先給結論，再列出關鍵依據。不要假裝知道未知資訊。' },
+        options: { rounds: 1, tokens: 768, filterThink: true },
+        members: [
+          { id: 'researcher', name: '研究員', role: '資料研究與事實核查', instruction: '專注拆解問題、列出已知與未知、指出需要查證的假設，避免無根據推測。', color: '#73a7ff', model: '' },
+          { id: 'strategist', name: '策略師', role: '方案、取捨與執行策略', instruction: '提出可落地方案，清楚比較取捨、成本、風險和優先次序。', color: '#a78bfa', model: '' },
+          { id: 'critic', name: '批評家', role: '反方、風險與品質把關', instruction: '主動找出盲點、反例、失敗模式和安全風險，提出如何驗證。', color: '#fb8b9b', model: '' },
+          { id: 'builder', name: '實作者', role: '技術落地與下一步', instruction: '把討論轉化成具體步驟、範例、驗收條件和簡潔的實作建議。', color: '#61dfbd', model: '' },
+          { id: 'director', name: '總監', role: '統籌、裁決與最終建議', instruction: '閱讀前面隊員的分析，整合共識與分歧，裁決重要取捨，指出仍未解決的風險，最後提出清晰、可執行的整體建議。不要只重複摘要，要說明你採用方案的理由。', color: '#f4c76d', model: '' }
+        ],
+        messages: [],
+        summary: ''
+      };
+      let state = loadState();
+      persist();
+      let controller = null;
+      let composing = false;
+      let currentTarget = 'all';
+      let toastTimer;
+
+      const $ = (id) => document.getElementById(id);
+      const uid = (prefix) => prefix + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      function clone(value) { return JSON.parse(JSON.stringify(value)); }
+      function loadState() {
+        try {
+          const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+          if (!saved) return clone(DEFAULT);
+          const defaultMembers = clone(DEFAULT.members);
+          const savedMembers = Array.isArray(saved.members) && saved.members.length ? saved.members : defaultMembers;
+          const members = saved.defaultRolesVersion !== 1 && !savedMembers.some((member) => member.id === 'director')
+            ? [...savedMembers, defaultMembers.find((member) => member.id === 'director')]
+            : savedMembers;
+          return {
+            ...clone(DEFAULT), ...saved,
+            settings: { ...clone(DEFAULT).settings, ...(saved.settings || {}) },
+            options: { ...clone(DEFAULT).options, ...(saved.options || {}) },
+            members,
+            defaultRolesVersion: 1,
+            messages: Array.isArray(saved.messages) ? saved.messages : []
+          };
+        } catch { return { ...clone(DEFAULT), defaultRolesVersion: 1 }; }
+      }
+      function persist() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+      function escapeHtml(text) {
+        return String(text).replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]));
+      }
+      function safeText(text) {
+        const escaped = escapeHtml(text || '');
+        return escaped.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+          .replace(/`([^`]+)`/g, '<code>$1</code>')
+          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      }
+      function showToast(message) {
+        const el = $('toast'); el.textContent = message; el.classList.add('show');
+        clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+      }
+      function formatTime(iso) { return new Date(iso).toLocaleTimeString('zh-HK', { hour:'2-digit', minute:'2-digit' }); }
+      function memberById(id) { return state.members.find((member) => member.id === id); }
+      function initials(name) { return String(name).slice(0, 1); }
+      function renderMembers() {
+        $('member-list').replaceChildren(...state.members.map((member) => {
+          const row = document.createElement('div'); row.className = 'member-row';
+          const button = document.createElement('button'); button.type = 'button'; button.className = 'member' + (currentTarget === member.id ? ' active' : '');
+          button.dataset.member = member.id; button.title = '選擇 @' + member.name; button.innerHTML = '<span class="avatar" style="background:' + escapeHtml(member.color) + '">' + escapeHtml(initials(member.name)) + '</span><span class="member-info"><span class="member-name">' + escapeHtml(member.name) + '</span><span class="member-role">' + escapeHtml(member.role) + '</span></span><span class="status-dot online"></span>';
+          const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'member-edit'; edit.dataset.editMember = member.id; edit.title = '編輯 ' + member.name; edit.setAttribute('aria-label', '編輯 ' + member.name); edit.textContent = '✎';
+          row.append(button, edit);
+          return row;
+        }));
+        $('member-count').textContent = String(state.members.length);
+      }
+      function renderTarget() {
+        const target = currentTarget === 'all' ? null : memberById(currentTarget);
+        $('target-hint').textContent = target ? '目前對象：@' + target.name : '目前對象：全隊';
+        $('target-card').innerHTML = target
+          ? '<div class="row"><div class="avatar" style="background:' + escapeHtml(target.color) + '">' + escapeHtml(initials(target.name)) + '</div><div><strong>@' + escapeHtml(target.name) + '</strong><div class="muted">' + escapeHtml(target.role) + '</div></div></div>'
+          : '<div class="row"><div class="avatar" style="background:#73a7ff">全</div><div><strong>全隊討論</strong><div class="muted">輪流邀請所有在線隊員</div></div></div>';
+      }
+      function renderMessages() {
+        const container = $('messages'); container.replaceChildren();
+        if (!state.messages.length) {
+          const empty = document.createElement('div'); empty.className = 'empty'; empty.innerHTML = '<div class="empty-icon">✦</div><strong>未有討論內容</strong><p>可以直接輸入問題，或按「開始一輪」讓全隊針對目前問題發言。</p>'; container.appendChild(empty);
+        } else state.messages.forEach((message) => {
+          const row = document.createElement('article'); row.className = 'message ' + (message.authorType === 'user' ? 'user' : 'agent');
+          const author = message.authorType === 'user' ? { name: '組長', color: '#73a7ff' } : memberById(message.authorId) || { name: message.authorName || 'AI', color:'#91a1b7' };
+          row.innerHTML = '<div class="avatar" style="background:' + escapeHtml(author.color) + '">' + escapeHtml(initials(author.name)) + '</div><div class="bubble"><div class="message-meta"><strong>' + escapeHtml(author.name) + '</strong><span>' + escapeHtml(message.authorType === 'user' ? '組長' : (memberById(message.authorId)?.role || 'AI 隊員')) + '</span><span>· ' + formatTime(message.createdAt) + '</span></div><div class="message-text">' + safeText(message.content) + (message.error ? '<div class="message-error">' + escapeHtml(message.error) + '</div>' : '') + '</div></div>';
+          container.appendChild(row);
+        });
+        container.scrollTop = container.scrollHeight;
+        $('message-count').textContent = String(state.messages.length);
+      }
+      function renderSettings() {
+        $('base-url').value = state.settings.baseUrl; $('api-key').value = state.settings.apiKey; $('system-prompt').value = state.settings.systemPrompt;
+        $('rounds-input').value = String(state.options.rounds); $('tokens-input').value = String(state.options.tokens); $('think-input').checked = state.options.filterThink;
+        $('inspector-model').textContent = state.settings.model || '自動';
+        $('model-pill').textContent = state.settings.model || '自動模型';
+      }
+      function renderAll() { renderMembers(); renderTarget(); renderMessages(); renderSettings(); }
+
+      function baseUrl() { return state.settings.baseUrl.replace(/\/+$/, ''); }
+      function authHeaders() { return state.settings.apiKey ? { Authorization: 'Bearer ' + state.settings.apiKey } : {}; }
+      async function api(path, options = {}) {
+        const response = await fetch(baseUrl() + path, { ...options, headers: { 'Content-Type': 'application/json', ...authHeaders(), ...(options.headers || {}) } });
+        if (!response.ok) {
+          const detail = await response.text().catch(() => '');
+          throw new Error('LM Studio 回應 ' + response.status + (detail ? ': ' + detail.slice(0, 240) : ''));
+        }
+        return response;
+      }
+      async function loadModels() {
+        $('model-status').textContent = '讀取中…';
+        try {
+          const response = await api('/models');
+          const data = await response.json();
+          const models = Array.isArray(data.data) ? data.data : [];
+          const select = $('model-select'); select.replaceChildren(new Option('自動使用第一個已載入模型', ''));
+          models.forEach((model) => select.add(new Option(model.id, model.id)));
+          select.value = state.settings.model;
+          $('model-status').textContent = models.length ? '找到 ' + models.length + ' 個模型' : '沒有已載入模型';
+          $('connection-pill').textContent = models.length ? '● 已連線' : '● 無模型';
+          $('connection-pill').className = 'pill ' + (models.length ? 'ok' : '');
+          if (!state.settings.model && models[0]) { state.settings.model = models[0].id; renderSettings(); persist(); }
+        } catch (error) {
+          $('model-status').textContent = error.message;
+          $('connection-pill').textContent = '● 離線'; $('connection-pill').className = 'pill';
+          showToast('無法連接 LM Studio：' + error.message);
+        }
+      }
+      function stripThink(text) {
+        if (!state.options.filterThink) return text;
+        return String(text).replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<think>[\s\S]*$/gi, '').trim();
+      }
+      function parseMention(text) {
+        const match = text.match(/^\\s*@([^\\s]+)\\s*/);
+        if (!match) return { target: currentTarget, text };
+        const wanted = match[1].toLowerCase();
+        const member = state.members.find((item) => item.name.toLowerCase() === wanted || item.id.toLowerCase() === wanted);
+        return { target: member ? member.id : currentTarget, text: member ? text.slice(match[0].length).trim() : text };
+      }
+      function buildMessages(member, userText) {
+        const recent = state.messages.slice(-12).map((message) => {
+          const name = message.authorType === 'user' ? '組長' : (memberById(message.authorId)?.name || message.authorName || '隊員');
+          return name + '：' + message.content;
+        }).join('\\n');
+        const system = [state.settings.systemPrompt, '你目前扮演「' + member.name + '」，角色是：' + member.role + '。', member.instruction, '這是一個多角色團隊房間。只回答你負責的角度，不要捏造其他隊員的發言。', '如果資料不足，清楚說明需要甚麼資料。'].filter(Boolean).join('\\n\\n');
+        return [{ role:'system', content:system }, { role:'user', content:'討論紀錄：\\n' + recent + '\\n\\n組長最新問題：\\n' + userText }];
+      }
+      async function streamAgent(member, userText, messageId) {
+        const model = member.model || state.settings.model;
+        if (!model) throw new Error('未設定模型。請先在設定中讀取 LM Studio 模型。');
+        const response = await api('/chat/completions', { method:'POST', signal:controller.signal, body: JSON.stringify({ model, messages:buildMessages(member, userText), temperature:.55, max_tokens:Number(state.options.tokens) || 768, stream:true }) });
+        if (!response.body) throw new Error('LM Studio 沒有回傳串流內容。');
+        const reader = response.body.getReader(), decoder = new TextDecoder();
+        let buffer = '', full = '';
+        const message = state.messages.find((item) => item.id === messageId);
+        const consumeLine = (line) => {
+          const trimmed = line.trim(); if (!trimmed || trimmed === 'data: [DONE]') return;
+          const payload = trimmed.startsWith('data:') ? trimmed.slice(5).trim() : trimmed;
+          try {
+            const json = JSON.parse(payload);
+            const delta = json.choices?.[0]?.delta?.content || json.choices?.[0]?.text || '';
+            if (delta) { full += delta; message.content = stripThink(full); renderMessages(); }
+          } catch { /* ignore non-JSON SSE keepalive lines */ }
+        };
+        while (true) {
+          const { value, done } = await reader.read(); if (done) break;
+          buffer += decoder.decode(value, { stream:true });
+          const lines = buffer.split('\\n'); buffer = lines.pop() || '';
+          lines.forEach(consumeLine);
+        }
+        if (buffer.trim()) consumeLine(buffer);
+        message.content = stripThink(full) || '（隊員沒有輸出內容）';
+      }
+      async function askMember(member, userText) {
+        const message = { id:uid('msg'), authorType:'agent', authorId:member.id, authorName:member.name, content:'', createdAt:new Date().toISOString() };
+        state.messages.push(message); persist(); renderMessages();
+        try { await streamAgent(member, userText, message.id); }
+        catch (error) {
+          if (error.name === 'AbortError') { message.content = message.content || '（已停止生成）'; }
+          else { message.content = message.content || '（生成失敗）'; message.error = error.message; }
+        }
+        persist(); renderMessages();
+      }
+      function targetMembers(target) { return target === 'all' ? state.members : [memberById(target)].filter(Boolean); }
+      async function sendPrompt() {
+        if (controller) return;
+        const input = $('prompt-input'), raw = input.value.trim(); if (!raw) return;
+        if (raw.length > 4000) { showToast('訊息太長，請縮短至 4000 字。'); return; }
+        const parsed = parseMention(raw); currentTarget = parsed.target || 'all'; renderMembers(); renderTarget();
+        const text = parsed.text || raw;
+        state.messages.push({ id:uid('msg'), authorType:'user', content:raw, createdAt:new Date().toISOString() }); input.value=''; updateCount(); persist(); renderMessages();
+        controller = new AbortController(); toggleGenerating(true);
+        try {
+          for (const member of targetMembers(currentTarget)) await askMember(member, text);
+        } finally { controller = null; toggleGenerating(false); }
+      }
+      async function runRound() {
+        const latest = [...state.messages].reverse().find((message) => message.authorType === 'user');
+        if (!latest) { showToast('請先輸入一條組長問題。'); $('prompt-input').focus(); return; }
+        if (controller) return;
+        controller = new AbortController(); toggleGenerating(true);
+        try {
+          for (let round=0; round<Number(state.options.rounds); round++) for (const member of state.members) await askMember(member, latest.content);
+        } finally { controller = null; toggleGenerating(false); }
+      }
+      function toggleGenerating(active) {
+        $('send-btn').textContent = active ? '停止' : '發送'; $('send-btn').dataset.action = active ? 'stop' : 'send';
+        $('round-btn').disabled = active; $('send-btn').classList.toggle('danger', active); $('send-btn').classList.toggle('primary', !active);
+      }
+      function stopGeneration() { if (controller) controller.abort(); }
+      function updateCount() { $('char-count').textContent = String($('prompt-input').value.length); }
+      function exportChat() {
+        const payload = { exportedAt:new Date().toISOString(), settings:{ ...state.settings, apiKey: state.settings.apiKey ? '[已隱藏]' : '' }, members:state.members, messages:state.messages, summary:state.summary };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' }), link = document.createElement('a');
+        link.href = URL.createObjectURL(blob); link.download = 'ai-team-room-' + new Date().toISOString().slice(0,10) + '.json'; link.click(); URL.revokeObjectURL(link.href); showToast('已匯出討論紀錄');
+      }
+      function makeSummary() {
+        const content = state.messages.map((message) => (message.authorType === 'user' ? '組長' : (memberById(message.authorId)?.name || '隊員')) + '：' + message.content).join('\\n');
+        state.summary = content ? '討論摘要（' + new Date().toLocaleString('zh-HK') + '）\\n\\n' + content.slice(-5000) : '暫時沒有可摘要的內容。';
+        showSummaryDialog(); persist();
+      }
+      function showSummaryDialog() {
+        const dialog = document.createElement('dialog'); dialog.innerHTML = '<div class="dialog-head"><h2>討論摘要</h2><button class="btn ghost" type="button">✕</button></div><div class="dialog-body"><textarea style="width:100%;min-height:320px" readonly></textarea></div><div class="dialog-foot"><button class="btn primary" type="button">複製摘要</button></div>';
+        document.body.appendChild(dialog); dialog.querySelector('textarea').value = state.summary || '暫時沒有可摘要的內容。'; dialog.showModal();
+        dialog.querySelector('.btn.ghost').onclick = () => { dialog.close(); dialog.remove(); };
+        dialog.querySelector('.btn.primary').onclick = async () => { await navigator.clipboard?.writeText(dialog.querySelector('textarea').value); showToast('已複製摘要'); };
+        dialog.addEventListener('close', () => dialog.remove(), { once:true });
+      }
+      function openMember(member) {
+        $('member-dialog-title').textContent = member ? '編輯 AI 隊員' : '新增 AI 隊員'; $('member-id').value = member?.id || '';
+        $('member-name').value = member?.name || ''; $('member-role').value = member?.role || ''; $('member-instruction').value = member?.instruction || ''; $('member-model').value = member?.model || ''; $('member-color').value = member?.color || '#73a7ff';
+        $('delete-member-btn').classList.toggle('hidden', !member); $('member-dialog').showModal();
+      }
+      function saveMember() {
+        const name = $('member-name').value.trim(), role = $('member-role').value.trim(), instruction = $('member-instruction').value.trim();
+        if (!name || !role || !instruction) { showToast('請填寫名稱、角色和角色指令。'); return; }
+        const id = $('member-id').value || name.toLowerCase().replace(/[^a-z0-9一-龥]+/gi, '-').replace(/^-|-$/g, '') || uid('member');
+        const item = { id, name, role, instruction, color:$('member-color').value, model:$('member-model').value.trim() };
+        const index = state.members.findIndex((member) => member.id === id); if (index >= 0) state.members[index] = item; else state.members.push(item);
+        persist(); renderAll(); $('member-dialog').close(); showToast('已儲存隊員');
+      }
+      function deleteMember() {
+        const id = $('member-id').value; if (!id) return;
+        state.members = state.members.filter((member) => member.id !== id); if (currentTarget === id) currentTarget = 'all';
+        persist(); renderAll(); $('member-dialog').close(); showToast('已刪除隊員');
+      }
+      function saveSettings() {
+        const url = $('base-url').value.trim().replace(/\/+$/, '');
+        try { new URL(url); } catch { showToast('API Base URL 格式不正確。'); return; }
+        state.settings.baseUrl = url; state.settings.apiKey = $('api-key').value.trim(); state.settings.model = $('model-select').value; state.settings.systemPrompt = $('system-prompt').value.trim();
+        state.options.rounds = Number($('rounds-input').value) || 1; state.options.tokens = Math.min(8192, Math.max(64, Number($('tokens-input').value) || 768)); state.options.filterThink = $('think-input').checked;
+        persist(); renderSettings(); $('settings-dialog').close(); loadModels(); showToast('設定已儲存，正在測試連線…');
+      }
+      document.addEventListener('click', (event) => {
+        const editMember = event.target.closest('[data-edit-member]'); if (editMember) { openMember(memberById(editMember.dataset.editMember)); return; }
+        const member = event.target.closest('[data-member]'); if (member) { currentTarget = member.dataset.member; renderMembers(); renderTarget(); return; }
+        const action = event.target.closest('[data-action]')?.dataset.action; if (!action) return;
+        if (action === 'send') sendPrompt(); if (action === 'stop') stopGeneration(); if (action === 'run-round') runRound(); if (action === 'settings') { $('settings-dialog').showModal(); loadModels(); }
+        if (action === 'close-dialog') event.target.closest('dialog')?.close(); if (action === 'save-settings') saveSettings(); if (action === 'load-models') loadModels();
+        if (action === 'add-member') openMember(); if (action === 'save-member') saveMember(); if (action === 'delete-member') deleteMember(); if (action === 'export') exportChat(); if (action === 'summary') makeSummary(); if (action === 'focus-chat') $('prompt-input').focus();
+        if (action === 'new-chat') { if (state.messages.length && !confirm('清除目前討論並開始新房間？')) return; state.messages=[]; state.summary=''; persist(); renderMessages(); }
+      });
+      $('prompt-input').addEventListener('compositionstart', () => { composing = true; });
+      $('prompt-input').addEventListener('compositionend', () => { composing = false; });
+      $('prompt-input').addEventListener('input', updateCount);
+      $('prompt-input').addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey && !composing) { event.preventDefault(); sendPrompt(); } });
+      $('rounds-input').addEventListener('change', () => { state.options.rounds=Number($('rounds-input').value); persist(); });
+      $('tokens-input').addEventListener('change', () => { state.options.tokens=Number($('tokens-input').value); persist(); });
+      $('think-input').addEventListener('change', () => { state.options.filterThink=$('think-input').checked; persist(); });
+      renderAll(); updateCount();
+    })();
+  </script>
+</body>
+</html>
